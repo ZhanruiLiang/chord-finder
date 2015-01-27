@@ -5,11 +5,13 @@ class Instrument
 
 
 _parse_alter = (alter) ->
-  if alter in ['#', 'b']
+  if alter in ['#', 'b', '']
     if alter == '#'
       1
     else if alter == 'b'
       -1
+    else
+      0
   else if alter in [0, -1, 1]
     alter
   else
@@ -54,11 +56,16 @@ class Note
 
 
 guitar = new Instrument(
-  'Guitar', ['E4', 'B4', 'G3', 'D3', 'A2', 'E2'].map(Note.from_name)
+  'Guitar', ['E4', 'B3', 'G3', 'D3', 'A2', 'E2'].map(Note.from_name)
+)
+
+ukulele = new Instrument(
+  'Ukulele', ['A4', 'E4', 'C4', 'G4'].map(Note.from_name)
 )
 
 root = exports ? window
 root.Instrument = Instrument
 root.Note = Note
 root.guitar = guitar
+root.ukulele = ukulele
 root.divmod = divmod
