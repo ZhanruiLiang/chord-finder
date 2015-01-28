@@ -154,7 +154,7 @@ gen_chords = (name, config={}) ->
       result = new ChordOnInstrument(chord, note_positions.slice())
       if all_used()
         results.push(result)
-      else
+      else if note_positions.length > 2
         partitial_results.push(result)
       return
     max_fret = Math.min(config.min_fret + config.max_span, inst.n_frets)
