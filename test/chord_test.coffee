@@ -36,10 +36,10 @@ describe 'chord', ->
 
 
 describe 'gen_chords', ->
-  it 'C', ->
-    console.log (c.note_positions for c in chord_lib.gen_chords('C')[0])
-  it 'G7', ->
-    console.log (c.note_positions for c in chord_lib.gen_chords('G7')[0])
+  # it 'C', ->
+  #   console.log (c.note_positions for c in chord_lib.gen_chords('C')[0])
+  # it 'G7', ->
+  #   console.log (c.note_positions for c in chord_lib.gen_chords('G7')[0])
 
 
 describe 'test_tuning', ->

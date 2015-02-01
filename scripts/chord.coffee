@@ -23,6 +23,10 @@ class Instrument
   get_pitch: (string, fret) ->
     @tuning[string].pitch + fret
 
+  get_note: (string, fret) ->
+    pitch = @get_pitch(string, fret)
+    note = Note.from_pitch(pitch)
+
 
 class UnknownAlterError
   constructor: (@alter) ->
@@ -83,7 +87,16 @@ class NotePosition
 
 
 class ChordOnInstrument
-  constructor: (@chord, @note_positions) ->
+  constructor: (@chord, @instrument, @note_positions) ->
+
+  is_covered_by: (other) ->
+    a = {}
+    for p in other.note_positions
+      a[p.string] = p.fret
+    for p in @note_positions
+      if not a[p.string]? or a[p.string] != p.fret
+        return false
+    return true
 
 
 class UnknownChordError
@@ -119,7 +132,7 @@ default_gen_chords_config =
   min_fret: 0
   max_span: 4
   allow_empty_string: true
-  instrument: 'Guitar'
+  instrument: 'guitar'
 
 # @param name: chord name.
 # @param config: {
@@ -131,36 +144,46 @@ default_gen_chords_config =
 # @return: ([ChordOnInstrument], [ChordOnInstrument]), results and partitial results
 gen_chords = (name, config={}) ->
   chord = Chord.from_name(name)
-  config.instrument ?= default_gen_chords_config.instrument
-  config.allow_empty_string ?= default_gen_chords_config.instrument
-  config.min_fret ?= default_gen_chords_config.min_fret
-  config.max_span ?= default_gen_chords_config.max_span
+  for key, value of default_gen_chords_config
+    config[key] = config[key] ? value
 
   inst = (
     inst for inst in instruments when config.instrument.toLowerCase() == inst.name.toLowerCase())[0]
   results = []
-  partitial_results = []
 
   used_pitches = (0 for _ in [1..chord.pitch_indices.length])
 
-  all_used = () ->
+  all_pitches_used = () ->
     for c in used_pitches
       if c == 0
         return false
     return true
 
+  is_covered = (result) ->
+    for other in results
+      if result.is_covered_by(other)
+        return true
+    return false
+
   search = (string, note_positions) ->
     if string == inst.n_strings
-      result = new ChordOnInstrument(chord, note_positions.slice())
-      if all_used()
-        results.push(result)
-      else if note_positions.length > 2
-        partitial_results.push(result)
+      result = new ChordOnInstrument(chord, inst, note_positions.slice())
+      if all_pitches_used()
+        if not is_covered(result)
+          results.push(result)
       return
-    max_fret = Math.min(config.min_fret + config.max_span, inst.n_frets)
+    min_fret = config.min_fret
+    for p in note_positions
+      if p.fret > 0 and p.fret < min_fret
+        min_fret = p.fret
+
+    if note_positions.length > 0
+      max_fret = Math.min(inst.n_frets, min_fret + config.max_span)
+    else
+      max_fret = inst.n_frets
     # Use this string
-    fret_trails = [config.min_fret..max_fret]
-    if config.min_fret > 0 and config.allow_empty_string
+    fret_trails = [min_fret..max_fret]
+    if min_fret > 0 and config.allow_empty_string
       fret_trails.unshift(0)
     for fret in fret_trails
       pitch = inst.get_pitch(string, fret)
@@ -179,8 +202,137 @@ gen_chords = (name, config={}) ->
 
   search(0, [])
   sort_chords(results)
-  sort_chords(partitial_results)
-  return [results, partitial_results]
+  return results
+
+
+default_render_metric = 
+  color: '#000000'
+  string_width: 3
+  string_distance: 16
+  fret_width: 3
+  fret_distance: 30
+  margin_h: 10
+  margin_v: 20
+  label_margin_h: 15
+  label_margin_v: 20
+  note_radius: 6
+  fontSize: 11
+  fontFamily: 'arial'
+  min_span: 3
+
+
+render_chord = (chord_on_instrument, raphael, container, metric={}) ->
+  # metric = {
+  #   color: '#0c0c0c'
+  #   string_width
+  #   string_distance
+  #   fret_width
+  #   fret_distance
+  #   margin_h
+  #   margin_v
+  #   label_margin_v
+  #   label_margin_h
+  #   note_radius
+  #   fontSize
+  #   fontFamily
+  # }
+  for name, value of default_render_metric
+    metric[name] = metric[name] ? value
+
+  ci = chord_on_instrument
+  inst = ci.instrument
+  frets = (p.fret for p in ci.note_positions)
+  # Math.min([]) = 0
+  min_fret_display = Math.min(frets...)
+  min_fret = Math.min(frets...)
+  max_fret = Math.max(frets...)
+  max_fret_display = Math.max(max_fret, min_fret_display + 3)
+  n_frets_display = max_fret_display - min_fret_display + 1
+  width = (metric.margin_h \
+    + metric.string_distance * (inst.n_strings - 1) \
+    + metric.label_margin_h + metric.margin_h)
+  height = (metric.margin_v + metric.label_margin_v \
+    + metric.fret_distance * (n_frets_display - 1) \
+    + metric.margin_v)
+  paper = raphael container, width, height
+  x0 = metric.margin_h
+  y0 = metric.margin_v + metric.label_margin_v
+  # Render strings
+  get_string_path = () ->
+    x = x0
+    y = y0
+    path = []
+    h = (n_frets_display - 1) * metric.fret_distance
+    for i in [1..inst.n_strings]
+      path.push ['M', x, y]
+      path.push ['L', x, y + h]
+      x += metric.string_distance
+    path
+
+  get_frets_path = () ->
+    x = x0
+    y = y0
+    w = (inst.n_strings - 1) * metric.string_distance
+    path = []
+    for i in [1..n_frets_display]
+      path.push ['M', x, y]
+      path.push ['L', x + w, y]
+      y += metric.fret_distance
+    path
+
+  get_string_x = (string) ->
+    x0 + (inst.n_strings - 1 - string) * metric.string_distance
+
+  get_notes = () ->
+    notes = paper.set()
+    for p in ci.note_positions
+      x = get_string_x(p.string)
+      y = y0 + (p.fret - min_fret_display - 0.5) * metric.fret_distance
+      if y > y0
+        notes.push paper.circle(x, y, metric.note_radius)
+    notes.attr
+      fill: metric.color
+
+  put_top_label = (string, label) ->
+    paper.text(
+      get_string_x(string),
+      y0 - metric.label_margin_v,
+      label
+    )
+
+  get_labels = () ->
+    labels = paper.set()
+    string_used = (false for _ in [1..inst.n_strings])
+    for p in ci.note_positions
+      string_used[p.string] = true
+      labels.push put_top_label(p.string, inst.get_note(p.string, p.fret).toString()) 
+    for string in [0..inst.n_strings - 1]
+      if not string_used[string]
+        labels.push put_top_label(string, 'x')
+    if min_fret_display > 1
+      labels.push paper.text(
+        x0 + (inst.n_strings - 1) * metric.string_distance + metric.label_margin_h,
+        y0 + metric.fret_distance * 0.5,
+        min_fret_display.toString()
+      )
+    labels.attr
+      'font-family': metric.fontFamily
+      'font-size': metric.fontSize
+
+  strings = paper.path(get_string_path()).attr
+    fill: metric.color
+    width: metric.string_width
+  # Render frets
+  fret_bars = paper.path(get_frets_path()).attr
+    fill: metric.color
+    width: metric.fret_width
+  # Render notes
+  notes = get_notes()
+  # Render labels
+  labels = get_labels()
+
+  all = paper.set()
+  all.push strings, fret_bars, notes, labels
 
 
 sort_chords = (chords_on_instrument) ->
@@ -207,3 +359,4 @@ root.Chord = Chord
 root.gen_chords = gen_chords
 root.guitar = guitar
 root.ukulele = ukulele
+root.render_chord = render_chord

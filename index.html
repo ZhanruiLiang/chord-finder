@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script type="text/javascript" src="scripts/coffee-script.js"></script>
+    <script type="text/javascript" src="scripts/jquery-2.1.3.min.js"></script>
+    <script type="text/javascript" src="scripts/raphael-min.js"></script>
+    <script type="text/coffeescript" src="scripts/chord.coffee"></script>
+  </head>
+  <body>
+    <style type="text/css">
+#chords .row>div{
+  display: inline-block;
+}
+div {
+  border: 1px solid #000;
+}
+    </style>
+    <div id="chords">
+    </div>
+    <script type="text/coffeescript">
+
+Counter =
+  chord_id: 0
+
+add_chords = (name, config={}) ->
+  row = $('<div class="row">').appendTo($('#chords'))
+  row.append($('<span>').html(name + ': '))
+  row.append($('<br>'))
+  for ci in gen_chords(name, config)
+    id = 'chord-' + Counter.chord_id
+    $('<div>').attr('id', id).appendTo(row)
+    Counter.chord_id += 1
+    render_chord(ci, Raphael, id)
+
+$ ->
+  add_chords 'C',
+    instrument: 'ukulele'
+  # add_chords 'C'
+  # add_chords 'Dm'
+  # add_chords 'Em'
+  # add_chords 'F'
+
+    </script>
+  </body>
+</html>
